@@ -16,7 +16,7 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_instance" "control_plane" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
 user_data = <<-EOF
 #!/bin/bash
@@ -50,9 +50,14 @@ apt-get install -y apt-transport-https curl
 
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 
-cat <<EOT > /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOT
+# Kubernetes install
+mkdir -p /etc/apt/keyrings
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
+  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
+  | tee /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update -y
 apt-get install -y kubelet kubeadm kubectl
@@ -82,11 +87,12 @@ CONTROL_PLANE_IP=$(curl -s \
 
 kubeadm init \
   --pod-network-cidr=10.10.0.0/16 \
-  --apiserver-advertise-address=${CONTROL_PLANE_IP}
+  --apiserver-advertise-address=$${CONTROL_PLANE_IP}
 
 mkdir -p /root/.kube
 cp -i /etc/kubernetes/admin.conf /root/.kube/config
 chown 0:0 /root/.kube/config
+
 
 EOF
 
@@ -98,7 +104,7 @@ EOF
 
 resource "aws_instance" "worker_1" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
 user_data = <<-EOF
 #!/bin/bash
@@ -132,11 +138,19 @@ apt-get install -y apt-transport-https curl
 
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 
-cat <<EOT > /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOT
+# Kubernetes repo (novo padrão)
+mkdir -p /etc/apt/keyrings
 
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
+  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
+  | tee /etc/apt/sources.list.d/kubernetes.list
+  
 apt-get update -y
+apt-get install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
+
 apt-get install -y kubelet kubeadm kubectl
 apt-mark hold kubelet kubeadm kubectl
 
@@ -164,7 +178,7 @@ EOF
 
 resource "aws_instance" "worker_2" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
 user_data = <<-EOF
 #!/bin/bash
@@ -198,11 +212,19 @@ apt-get install -y apt-transport-https curl
 
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 
-cat <<EOT > /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOT
+# Kubernetes repo (novo padrão)
+mkdir -p /etc/apt/keyrings
 
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
+  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
+  | tee /etc/apt/sources.list.d/kubernetes.list
+  
 apt-get update -y
+apt-get install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
+
 apt-get install -y kubelet kubeadm kubectl
 apt-mark hold kubelet kubeadm kubectl
 

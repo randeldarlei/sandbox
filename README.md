@@ -29,6 +29,19 @@ Exemplo:
 ssh ubuntu@<IP_DO_CONTROL_PLANE>
 ```
 
+Validar se o `user_data` deu certo:
+
+```bash
+
+sudo cloud-init status
+
+sudo tail -n 200 /var/log/cloud-init-output.log
+
+sudo tail -n 200 /var/log/cloud-init.log
+
+sudo kubeadm init
+```
+
 ---
 
 ## 2️⃣ Gerar o comando de join
@@ -42,8 +55,8 @@ sudo kubeadm token create --print-join-command
 Esse comando irá gerar uma saída semelhante a:
 
 ```bash
-kubeadm join 172.31.57.89:6443 --token if9hn9.xhxo6s89byj9rsmd \
-  --discovery-token-ca-cert-hash sha256:ad583497a4171d1fc7d21e2ca2ea7b32bdc8450a1a4ca4cfa2022748a99fa477
+kubeadm <CONTROL_PLANE_IP> --token <TOKEN_ID>\
+  --discovery-token-ca-cert-hash sha256:<CERT_ID>
 ```
 
 ### O que este comando contém
@@ -69,8 +82,8 @@ ssh ubuntu@<IP_DO_WORKER>
 Execute **exatamente o comando gerado no passo anterior**, adicionando `sudo`:
 
 ```bash
-sudo kubeadm join 172.31.57.89:6443 --token if9hn9.xhxo6s89byj9rsmd \
-  --discovery-token-ca-cert-hash sha256:ad583497a4171d1fc7d21e2ca2ea7b32bdc8450a1a4ca4cfa2022748a99fa477
+kubeadm <CONTROL_PLANE_IP> --token <TOKEN_ID>\
+  --discovery-token-ca-cert-hash sha256:<CERT_ID>
 ```
 
 Aguarde a mensagem de sucesso indicando que o node foi registrado no cluster.

@@ -49,6 +49,31 @@ resource "aws_vpc_security_group_ingress_rule" "allow_http_5" {
   to_port           = 2380
 }
 
+resource "aws_vpc_security_group_ingress_rule" "allow_http_6" {
+  security_group_id = aws_security_group.sandbox_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 6783
+  ip_protocol       = "tcp"
+  to_port           = 6783
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_http_7" {
+  security_group_id = aws_security_group.sandbox_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 6783
+  ip_protocol       = "udp"
+  to_port           = 6783
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_http_8" {
+  security_group_id = aws_security_group.sandbox_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 8080
+  ip_protocol       = "tcp"
+  to_port           = 8080
+}
+
+
 resource "aws_vpc_security_group_ingress_rule" "allow_ssh" {
   security_group_id = aws_security_group.sandbox_sg.id
   cidr_ipv4         = "0.0.0.0/0"
