@@ -24,6 +24,7 @@ set -e
 
 apt-get update -y
 
+sed -i '/ swap / s/^/#/' /etc/fstab
 swapoff -a
 
 mkdir -p /etc/modules-load.d
@@ -60,7 +61,7 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
   | tee /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update -y
-apt-get install -y kubelet kubeadm kubectl
+apt-get install -y kubelet=1.29.* kubeadm=1.29.* kubectl=1.29.*
 apt-mark hold kubelet kubeadm kubectl
 
 apt-get install -y gnupg lsb-release ca-certificates
@@ -89,9 +90,27 @@ kubeadm init \
   --pod-network-cidr=10.10.0.0/16 \
   --apiserver-advertise-address=$${CONTROL_PLANE_IP}
 
+# kubeconfig para root
 mkdir -p /root/.kube
-cp -i /etc/kubernetes/admin.conf /root/.kube/config
-chown 0:0 /root/.kube/config
+cp /etc/kubernetes/admin.conf /root/.kube/config
+chown root:root /root/.kube/config
+
+# kubeconfig para ubuntu
+mkdir -p /home/ubuntu/.kube
+cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+chown -R ubuntu:ubuntu /home/ubuntu/.kube
+
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+echo "Aguardando API Server ficar saudável..."
+
+until kubectl get --raw='/healthz' >/dev/null 2>&1; do
+  sleep 5
+done
+
+echo "API Server saudável. Instalando Calico..."
+
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/calico.yaml
 
 
 EOF
@@ -112,6 +131,7 @@ set -e
 
 apt-get update -y
 
+sed -i '/ swap / s/^/#/' /etc/fstab
 swapoff -a
 
 mkdir -p /etc/modules-load.d
@@ -148,10 +168,7 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
   | tee /etc/apt/sources.list.d/kubernetes.list
   
 apt-get update -y
-apt-get install -y kubelet kubeadm kubectl
-apt-mark hold kubelet kubeadm kubectl
-
-apt-get install -y kubelet kubeadm kubectl
+apt-get install -y kubelet=1.29.* kubeadm=1.29.* kubectl=1.29.*
 apt-mark hold kubelet kubeadm kubectl
 
 apt-get install -y gnupg lsb-release ca-certificates
@@ -186,6 +203,7 @@ set -e
 
 apt-get update -y
 
+sed -i '/ swap / s/^/#/' /etc/fstab
 swapoff -a
 
 mkdir -p /etc/modules-load.d
@@ -222,11 +240,9 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
   | tee /etc/apt/sources.list.d/kubernetes.list
   
 apt-get update -y
-apt-get install -y kubelet kubeadm kubectl
+apt-get install -y kubelet=1.29.* kubeadm=1.29.* kubectl=1.29.*
 apt-mark hold kubelet kubeadm kubectl
 
-apt-get install -y kubelet kubeadm kubectl
-apt-mark hold kubelet kubeadm kubectl
 
 apt-get install -y gnupg lsb-release ca-certificates
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
