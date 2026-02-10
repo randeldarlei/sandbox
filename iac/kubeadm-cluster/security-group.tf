@@ -1,6 +1,7 @@
 resource "aws_security_group" "sandbox_sg" {
   name        = "sandbox_sg"
   description = "Allow TLS inbound traffic and all outbound traffic"
+  vpc_id     = aws_vpc.cluster_vpc.id
 
   tags = {
     Name = "allow_tls"

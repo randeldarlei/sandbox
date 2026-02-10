@@ -18,6 +18,29 @@ Este cenário assume que:
 Este README descreve **exclusivamente o passo manual necessário** para que os nodes Worker entrem no cluster.
 
 ---
+## Configurando Provider e gerando uma chave SSH para acesso as inatâncias do Worker:
+
+Vá a console da AWS, crie um usuário atribua permissões necessárias para gerenciar `EC2`, `VPC` e `IAM`.
+
+Gere uma `ACCESS_KEY` e `SECRET_KEY`, adicione ao arquivo `providers.tf`.
+
+No seu terminal local execute o comando a seguir e siga o fluxo para gerar uma chave `ssh`:
+
+```bash
+ssh-keygen -t ed25519 -f k8s-workers-key
+```
+
+Em seguida rode o `Terraform` normalmente:
+
+```bash
+
+terraform init
+
+terraform apply
+```
+
+---
+
 
 ## 1️⃣ Acessar o Control Plane
 
@@ -26,7 +49,7 @@ Conecte-se via SSH na instância que atua como **Control Plane**.
 Exemplo:
 
 ```bash
-ssh ubuntu@<IP_DO_CONTROL_PLANE>
+ssh -A -i k8s-workers-key.pem ubuntu@<IP_DO_CONTROL_PLANE>
 ```
 
 Validar se o `user_data` deu certo:
@@ -36,8 +59,6 @@ Validar se o `user_data` deu certo:
 sudo cloud-init status
 
 sudo tail -n 200 /var/log/cloud-init-output.log
-
-sudo tail -n 200 /var/log/cloud-init.log
 
 sudo kubeadm init
 ```
@@ -59,7 +80,11 @@ kubeadm <CONTROL_PLANE_IP> --token <TOKEN_ID>\
   --discovery-token-ca-cert-hash sha256:<CERT_ID>
 ```
 
-### O que este comando contém
+Copie o comando de `Join` e acesse uma das instâncias `Workers` via ssh diretamente do `Control Plane` ele irá servir como um bastion host:
+
+ssh ubuntu@<PRIVATE_IP_HOST>
+
+### O que o comando de Join contém
 
 * **IP:PORT do Control Plane** (API Server)
 * **Token de bootstrap** para o node entrar no cluster
@@ -100,27 +125,18 @@ Volte ao Control Plane e execute:
 kubectl get nodes
 ```
 
-Saída esperada (exemplo):
+Já no Node execute:
 
-```text
-NAME            STATUS     ROLES           AGE     VERSION
-control-plane   NotReady   control-plane   10m     v1.xx.x
-worker-1        NotReady   <none>           2m      v1.xx.x
-worker-2        NotReady   <none>           1m      v1.xx.x
+```bash
+kubectl run nginx-test \
+  --image=nginx:latest \
+  --restart=Never
 ```
 
-> ⚠️ É normal os nodes aparecerem como **NotReady** neste momento, pois ainda **nenhum CNI foi instalado**.
+Valide a integridade do Pod criado:
+
+```bash
+kubectl logs <pod-name> -o wide
+``
 
 ---
-
-## Conclusão
-
-Com estes passos:
-
-* O cluster Kubernetes está corretamente inicializado
-* Os Workers foram adicionados manualmente de forma explícita e controlada
-* O fluxo respeita exatamente o comportamento do `kubeadm`
-
-Este método é **didático, previsível e alinhado com documentação oficial e provas (CKA)**.
-
-O próximo passo natural após este README é a instalação de um **CNI (Calico, Flannel, Cilium, etc.)**.
