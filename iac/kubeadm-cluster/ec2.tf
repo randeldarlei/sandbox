@@ -134,9 +134,9 @@ aws ssm put-parameter \
 EOF
 
   tags = {
-    Name = "k8sadm-control-plane"
+    Name = "K8s-Control-Plane"
   }
-  vpc_security_group_ids = [aws_security_group.sandbox_sg.id]
+  vpc_security_group_ids = [aws_security_group.control_plane_sg.id]
 }
 
 resource "aws_instance" "worker_1" {
@@ -148,13 +148,15 @@ resource "aws_instance" "worker_1" {
 
 user_data = <<-EOF
 #!/bin/bash
-set -e
+set -euo pipefail
 
-############################
+exec > >(tee /var/log/user-data.log) 2>&1
+
+echo "===== INICIANDO USER DATA WORKER ====="
+
 # IPv6 + APT
-############################
 
-# Desabilita IPv6 (NAT Gateway não suporta IPv6)
+echo "Desabilitando IPv6..."
 sysctl -w net.ipv6.conf.all.disable_ipv6=1
 sysctl -w net.ipv6.conf.default.disable_ipv6=1
 sysctl -w net.ipv6.conf.lo.disable_ipv6=1
@@ -165,24 +167,17 @@ net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
 EOT
 
-# Força APT usar IPv4
 echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
-############################
-# BASE DO SISTEMA
-############################
+# BASE
 
 apt-get update -y
 
-# Desabilita swap
 sed -i '/ swap / s/^/#/' /etc/fstab
 swapoff -a
 
-############################
-# KERNEL / SYSCTL
-############################
+# KERNEL
 
-mkdir -p /etc/modules-load.d
 cat <<EOT > /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
@@ -191,7 +186,6 @@ EOT
 modprobe overlay
 modprobe br_netfilter
 
-mkdir -p /etc/sysctl.d
 cat <<EOT > /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -200,9 +194,7 @@ EOT
 
 sysctl --system
 
-############################
 # DEPENDÊNCIAS
-############################
 
 apt-get install -y \
   apt-transport-https \
@@ -212,59 +204,47 @@ apt-get install -y \
   ca-certificates \
   unzip
 
-############################
-# AWS CLI v2
-############################
+# AWS CLI
 
 apt-get remove -y awscli || true
 
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
+curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+unzip -q awscliv2.zip
 ./aws/install
-export PATH=$PATH:/usr/local/bin
 
-############################
 # KUBERNETES
-############################
 
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
-  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+ | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
-  > /etc/apt/sources.list.d/kubernetes.list
+ > /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update -y
 apt-get install -y kubelet=1.29.* kubeadm=1.29.* kubectl=1.29.*
 apt-mark hold kubelet kubeadm kubectl
 
-############################
 # CONTAINERD
-############################
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+ | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-  > /etc/apt/sources.list.d/docker.list
+ > /etc/apt/sources.list.d/docker.list
 
 apt-get update -y
 apt-get install -y containerd.io
 
 containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+systemctl enable containerd
 systemctl restart containerd
 
-systemctl enable kubelet
-systemctl start kubelet
+# JOIN AUTOMÁTICO
 
-############################
-# JOIN NO CLUSTER
-############################
-
-until systemctl is-active --quiet kubelet; do
-  sleep 3
-done
+echo "Aguardando join command no SSM..."
 
 for i in {1..60}; do
   JOIN_CMD=$(aws ssm get-parameter \
@@ -274,6 +254,7 @@ for i in {1..60}; do
     --region us-east-2 2>/dev/null)
 
   if [[ -n "$JOIN_CMD" ]]; then
+    echo "Join command encontrado."
     break
   fi
 
@@ -281,29 +262,29 @@ for i in {1..60}; do
 done
 
 if [[ -z "$JOIN_CMD" ]]; then
-  echo "Join command não encontrado"
+  echo "Join command não encontrado após timeout."
   exit 1
 fi
 
-if echo "$JOIN_CMD" | grep -q control-plane; then
-  echo "ERRO: join command contém --control-plane"
-  exit 1
+# Evita rejoin se já estiver configurado
+if [ -f /etc/kubernetes/kubelet.conf ]; then
+  echo "Node já parece estar configurado. Abortando join."
+  exit 0
 fi
 
-bash -c "$JOIN_CMD \
-  --node-name $(hostname -s) \
-  --node-labels=node-role.kubernetes.io/worker=worker" \
-  | tee /var/log/kubeadm-join.log
+echo "Executando kubeadm join..."
 
+$JOIN_CMD --node-name $(hostname -s) --v=5 | tee /var/log/kubeadm-join.log
+
+echo "Worker entrou no cluster com sucesso"
+
+echo "===== FIM USER DATA WORKER ====="
 EOF
-
-
-
 
   tags = {
     Name = "k8sWorker"
   }
-  vpc_security_group_ids = [aws_security_group.sandbox_sg.id]
+  vpc_security_group_ids = [aws_security_group.workers_sg.id]
 }
 
 
@@ -316,13 +297,15 @@ resource "aws_instance" "worker_2" {
 
 user_data = <<-EOF
 #!/bin/bash
-set -e
+set -euo pipefail
 
-############################
+exec > >(tee /var/log/user-data.log) 2>&1
+
+echo "===== INICIANDO USER DATA WORKER ====="
+
 # IPv6 + APT
-############################
 
-# Desabilita IPv6 (NAT Gateway não suporta IPv6)
+echo "Desabilitando IPv6..."
 sysctl -w net.ipv6.conf.all.disable_ipv6=1
 sysctl -w net.ipv6.conf.default.disable_ipv6=1
 sysctl -w net.ipv6.conf.lo.disable_ipv6=1
@@ -333,24 +316,17 @@ net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
 EOT
 
-# Força APT usar IPv4
 echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
-############################
-# BASE DO SISTEMA
-############################
+# BASE
 
 apt-get update -y
 
-# Desabilita swap
 sed -i '/ swap / s/^/#/' /etc/fstab
 swapoff -a
 
-############################
-# KERNEL / SYSCTL
-############################
+# KERNEL
 
-mkdir -p /etc/modules-load.d
 cat <<EOT > /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
@@ -359,7 +335,6 @@ EOT
 modprobe overlay
 modprobe br_netfilter
 
-mkdir -p /etc/sysctl.d
 cat <<EOT > /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -368,9 +343,7 @@ EOT
 
 sysctl --system
 
-############################
 # DEPENDÊNCIAS
-############################
 
 apt-get install -y \
   apt-transport-https \
@@ -380,59 +353,47 @@ apt-get install -y \
   ca-certificates \
   unzip
 
-############################
-# AWS CLI v2
-############################
+# AWS CLI
 
 apt-get remove -y awscli || true
 
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
+curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+unzip -q awscliv2.zip
 ./aws/install
-export PATH=$PATH:/usr/local/bin
 
-############################
 # KUBERNETES
-############################
 
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
-  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+ | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
-  > /etc/apt/sources.list.d/kubernetes.list
+ > /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update -y
 apt-get install -y kubelet=1.29.* kubeadm=1.29.* kubectl=1.29.*
 apt-mark hold kubelet kubeadm kubectl
 
-############################
 # CONTAINERD
-############################
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+ | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-  > /etc/apt/sources.list.d/docker.list
+ > /etc/apt/sources.list.d/docker.list
 
 apt-get update -y
 apt-get install -y containerd.io
 
 containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+systemctl enable containerd
 systemctl restart containerd
 
-systemctl enable kubelet
-systemctl start kubelet
+# JOIN AUTOMÁTICO
 
-############################
-# JOIN NO CLUSTER
-############################
-
-until systemctl is-active --quiet kubelet; do
-  sleep 3
-done
+echo "Aguardando join command no SSM..."
 
 for i in {1..60}; do
   JOIN_CMD=$(aws ssm get-parameter \
@@ -442,6 +403,7 @@ for i in {1..60}; do
     --region us-east-2 2>/dev/null)
 
   if [[ -n "$JOIN_CMD" ]]; then
+    echo "Join command encontrado."
     break
   fi
 
@@ -449,29 +411,39 @@ for i in {1..60}; do
 done
 
 if [[ -z "$JOIN_CMD" ]]; then
-  echo "Join command não encontrado"
+  echo "Join command não encontrado após timeout."
   exit 1
 fi
 
-if echo "$JOIN_CMD" | grep -q control-plane; then
-  echo "ERRO: join command contém --control-plane"
-  exit 1
+# Evita rejoin se já estiver configurado
+if [ -f /etc/kubernetes/kubelet.conf ]; then
+  echo "Node já parece estar configurado. Abortando join."
+  exit 0
 fi
 
-bash -c "$JOIN_CMD \
-  --node-name $(hostname -s) \
-  --node-labels=node-role.kubernetes.io/worker=worker" \
-  | tee /var/log/kubeadm-join.log
+echo "Executando kubeadm join..."
 
+$JOIN_CMD --node-name $(hostname -s) --v=5 | tee /var/log/kubeadm-join.log
+
+echo "Worker entrou no cluster com sucesso"
+
+echo "===== FIM USER DATA WORKER ====="
 EOF
 
   tags = {
     Name = "k8sWorker"
   }
-  vpc_security_group_ids = [aws_security_group.sandbox_sg.id]
+  vpc_security_group_ids = [aws_security_group.workers_sg.id]
+}
+
+resource "tls_private_key" "k8s_workers" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
 resource "aws_key_pair" "k8s_workers" {
   key_name   = "k8s-workers-key"
-  public_key = file("${path.module}/k8s-workers-key.pub")
+  public_key = tls_private_key.k8s_workers.public_key_openssh
 }
+
+

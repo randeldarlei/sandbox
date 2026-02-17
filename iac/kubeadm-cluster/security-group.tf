@@ -1,91 +1,137 @@
-resource "aws_security_group" "sandbox_sg" {
-  name        = "sandbox_sg"
-  description = "Allow TLS inbound traffic and all outbound traffic"
-  vpc_id     = aws_vpc.cluster_vpc.id
+resource "aws_security_group" "control_plane_sg" {
+  name        = "control-plane-sg"
+  description = "Security Group for Kubernetes Control Plane"
+  vpc_id      = aws_vpc.cluster_vpc.id
 
   tags = {
-    Name = "allow_tls"
+    Name = "control-plane-sg"
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "allow_http" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 6443
-  ip_protocol       = "tcp"
-  to_port           = 6443
-}
+# SECURITY GROUP - CONTROL-PLANE
 
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_2" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 10250
-  ip_protocol       = "tcp"
-  to_port           = 10259
-}
-
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_3" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 30000
-  ip_protocol       = "tcp"
-  to_port           = 30000
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_4" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 32767
-  ip_protocol       = "tcp"
-  to_port           = 32767
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_5" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 2379
-  ip_protocol       = "tcp"
-  to_port           = 2380
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_6" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 6783
-  ip_protocol       = "tcp"
-  to_port           = 6783
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_7" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 6783
-  ip_protocol       = "udp"
-  to_port           = 6783
-}
-
-resource "aws_vpc_security_group_ingress_rule" "allow_http_8" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 8080
-  ip_protocol       = "tcp"
-  to_port           = 8080
-}
-
-
-resource "aws_vpc_security_group_ingress_rule" "allow_ssh" {
-  security_group_id = aws_security_group.sandbox_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
+# SSH somente do seu IP
+resource "aws_vpc_security_group_ingress_rule" "cp_ssh" {
+  security_group_id = aws_security_group.control_plane_sg.id
+  cidr_ipv4         = "200.53.200.187/32"
   from_port         = 22
-  ip_protocol       = "tcp"
   to_port           = 22
+  ip_protocol       = "tcp"
 }
 
+# API Server acessível apenas do seu IP
+resource "aws_vpc_security_group_ingress_rule" "cp_api_from_admin" {
+  security_group_id = aws_security_group.control_plane_sg.id
+  cidr_ipv4         = "200.53.200.187/32"
+  from_port         = 6443
+  to_port           = 6443
+  ip_protocol       = "tcp"
+}
 
-resource "aws_vpc_security_group_egress_rule" "allow_all_traffic" {
-  security_group_id = aws_security_group.sandbox_sg.id
+# API Server acessível pelos workers
+resource "aws_vpc_security_group_ingress_rule" "cp_api_from_workers" {
+  security_group_id            = aws_security_group.control_plane_sg.id
+  referenced_security_group_id = aws_security_group.workers_sg.id
+  from_port                    = 6443
+  to_port                      = 6443
+  ip_protocol                  = "tcp"
+}
+
+# Kubelet communication (control-plane → workers)
+resource "aws_vpc_security_group_ingress_rule" "cp_kubelet" {
+  security_group_id            = aws_security_group.control_plane_sg.id
+  referenced_security_group_id = aws_security_group.workers_sg.id
+  from_port                    = 10250
+  to_port                      = 10250
+  ip_protocol                  = "tcp"
+}
+
+# Egress livre (necessário para internet via NAT)
+resource "aws_vpc_security_group_egress_rule" "cp_egress" {
+  security_group_id = aws_security_group.control_plane_sg.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
+}
+
+
+# SECURITY GROUP - WORKERS
+
+resource "aws_security_group" "workers_sg" {
+  name        = "workers-sg"
+  description = "Security Group for Kubernetes Worker Nodes"
+  vpc_id      = aws_vpc.cluster_vpc.id
+
+  tags = {
+    Name = "workers-sg"
+  }
+}
+
+# SSH somente do seu IP (opcional, mas útil para debug)
+resource "aws_vpc_security_group_ingress_rule" "workers_ssh" {
+  security_group_id = aws_security_group.workers_sg.id
+  cidr_ipv4         = "200.53.200.187/32"
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+}
+
+# Comunicação interna entre workers (CNI, pods, etc)
+resource "aws_vpc_security_group_ingress_rule" "workers_internal" {
+  security_group_id            = aws_security_group.workers_sg.id
+  referenced_security_group_id = aws_security_group.workers_sg.id
+  ip_protocol                  = "-1"
+}
+
+
+# Comunicação do control plane → workers
+resource "aws_vpc_security_group_ingress_rule" "workers_from_cp" {
+  security_group_id            = aws_security_group.workers_sg.id
+  referenced_security_group_id = aws_security_group.control_plane_sg.id
+  ip_protocol                  = "-1"
+}
+
+# Egress livre (internet via NAT)
+resource "aws_vpc_security_group_egress_rule" "workers_egress" {
+  security_group_id = aws_security_group.workers_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+}
+
+# SECURITY GROUP - ALB
+
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Security Group for Application Load Balancer"
+  vpc_id      = aws_vpc.cluster_vpc.id
+
+  tags = {
+    Name = "alb-sg"
+  }
+}
+
+# HTTP
+resource "aws_vpc_security_group_ingress_rule" "alb_http" {
+  security_group_id = aws_security_group.alb_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+}
+
+# HTTPS
+resource "aws_vpc_security_group_ingress_rule" "alb_https" {
+  security_group_id = aws_security_group.alb_sg.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
+# ALB → Workers
+resource "aws_vpc_security_group_ingress_rule" "workers_from_alb" {
+  security_group_id            = aws_security_group.workers_sg.id
+  referenced_security_group_id = aws_security_group.alb_sg.id
+  from_port                    = 30000
+  to_port                      = 32767
+  ip_protocol                  = "tcp"
 }
