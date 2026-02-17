@@ -32,7 +32,7 @@ Workers não possuem IP público.
 
 - Conta AWS
 - Usuário IAM com permissões:
-  - EC2
+  - EC2 
   - VPC
   - IAM
   - SSM
