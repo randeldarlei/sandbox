@@ -13,7 +13,7 @@ resource "aws_security_group" "control_plane_sg" {
 # SSH somente do seu IP
 resource "aws_vpc_security_group_ingress_rule" "cp_ssh" {
   security_group_id = aws_security_group.control_plane_sg.id
-  cidr_ipv4         = "200.53.200.187/32"
+  cidr_ipv4         = "200.53.202.33/32"
   from_port         = 22
   to_port           = 22
   ip_protocol       = "tcp"
@@ -22,7 +22,7 @@ resource "aws_vpc_security_group_ingress_rule" "cp_ssh" {
 # API Server acessível apenas do seu IP
 resource "aws_vpc_security_group_ingress_rule" "cp_api_from_admin" {
   security_group_id = aws_security_group.control_plane_sg.id
-  cidr_ipv4         = "200.53.200.187/32"
+  cidr_ipv4         = "200.53.202.33/32"
   from_port         = 6443
   to_port           = 6443
   ip_protocol       = "tcp"
@@ -69,7 +69,7 @@ resource "aws_security_group" "workers_sg" {
 # SSH somente do seu IP (opcional, mas útil para debug)
 resource "aws_vpc_security_group_ingress_rule" "workers_ssh" {
   security_group_id = aws_security_group.workers_sg.id
-  cidr_ipv4         = "200.53.200.187/32"
+  cidr_ipv4         = "200.53.202.33/32"
   from_port         = 22
   to_port           = 22
   ip_protocol       = "tcp"

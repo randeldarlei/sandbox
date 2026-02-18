@@ -86,7 +86,7 @@ containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
 systemctl restart containerd
 
-# Descobre IP privado
+# Descobre IP privado e público
 TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
   -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 
@@ -94,10 +94,15 @@ CONTROL_PLANE_IP=$(curl -s \
   -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/local-ipv4)
 
+PUBLIC_IP=$(curl -s \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/public-ipv4)
+
 # Init do cluster
 kubeadm init \
   --pod-network-cidr=10.10.0.0/16 \
-  --apiserver-advertise-address=$${CONTROL_PLANE_IP}
+  --apiserver-advertise-address=$${CONTROL_PLANE_IP} \
+  --apiserver-cert-extra-sans=$${PUBLIC_IP}
 
 # kubeconfig
 mkdir -p /root/.kube
