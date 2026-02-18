@@ -1,6 +1,6 @@
-# 🚀 Kubernetes Cluster with kubeadm on AWS (Terraform)
+## 🚀 Kubernetes Cluster with kubeadm on AWS (Terraform)
 
-## 📌 Arquitetura
+### 📌 Arquitetura
 
 Este projeto provisiona automaticamente:
 
