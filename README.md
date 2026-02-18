@@ -100,12 +100,45 @@ terraform apply
 
 ---
 
-### 🖥 Acessando o Control Plane
+### 🖥 Adicionando o Contexto do Cluster na Máquina Local
+
+- *Fluxo*
+```bash
+sua máquina → SSH → Control Plane → 127.0.0.1:6443
+```
+- Obtenha o *IP Público* da *Instância Control Plane*:
 
 ```bash
-ssh -A -i k8s-workers-key ubuntu@<PUBLIC_IP_CONTROL_PLANE>
+terraform output -raw Control_Plane_Public_Ip
 ```
 
+- Copie o *kubeconfig* Original:
+
+```bash
+scp -i k8s-workers-key \
+    ubuntu@52.14.136.134:/home/ubuntu/.kube/config \
+    kubeconfig.yaml
+```
+
+- Abra um *Tunnel SSH*:
+
+```bash
+ssh -i k8s-workers-key \
+    -L 6443:127.0.0.1:6443 \
+    ubuntu@52.14.136.134
+```
+
+- Ajuste o *kubeconfig* para *localhost*:
+
+```bash
+sed -i 's#https://.*:6443#https://127.0.0.1:6443#g' kubeconfig.yaml
+```
+- Use o *kubectl* em outro Terminal:
+
+```bash
+export KUBECONFIG=$(pwd)/kubeconfig.yaml
+kubectl get nodes
+```
 ---
 
 ### 🔎 Validando cluster
