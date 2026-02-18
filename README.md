@@ -116,7 +116,7 @@ terraform output -raw Control_Plane_Public_Ip
 
 ```bash
 scp -i k8s-workers-key \
-    ubuntu@52.14.136.134:/home/ubuntu/.kube/config \
+    ubuntu@<CONTROL_PLANE_PUBLIC_IP>:/home/ubuntu/.kube/config \
     kubeconfig.yaml
 ```
 
@@ -125,7 +125,7 @@ scp -i k8s-workers-key \
 ```bash
 ssh -i k8s-workers-key \
     -L 6443:127.0.0.1:6443 \
-    ubuntu@52.14.136.134
+    ubuntu@<CONTROL_PLANE_PUBLIC_IP>
 ```
 
 - Ajuste o *kubeconfig* para *localhost*:
