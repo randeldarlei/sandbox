@@ -28,7 +28,7 @@ Workers não possuem IP público.
 
 ---
 
-# 🔐 Pré-requisitos
+### 🔐 Pré-requisitos
 
 - Conta AWS
 - Usuário IAM com permissões:
@@ -43,39 +43,39 @@ aws configure
 
 ---
 
-# 🔑 Gerando chave SSH
+### 🔑 Gerando chave SSH
 
 ssh-keygen -t ed25519 -f k8s-workers-key
 
 ---
 
-# 🏗 Provisionando infraestrutura
+### 🏗 Provisionando infraestrutura
 
 terraform init
 terraform apply
 
 ---
 
-# 🖥 Acessando o Control Plane
+### 🖥 Acessando o Control Plane
 
 ssh -A -i k8s-workers-key ubuntu@<PUBLIC_IP_CONTROL_PLANE>
 
 ---
 
-# 🔎 Validando cluster
+### 🔎 Validando cluster
 
 kubectl get nodes
 
 ---
 
-# 🧪 Testando o cluster
+### 🧪 Testando o cluster
 
 kubectl run nginx-test --image=nginx:latest --restart=Never
 kubectl get pods -o wide
 
 ---
 
-# 📊 Logs importantes
+### 📊 Logs importantes
 
 Worker:
 /var/log/user-data.log
@@ -86,6 +86,6 @@ Control Plane:
 
 ---
 
-# 🧨 Destruir ambiente
+### 🧨 Destruir ambiente
 
 terraform destroy
