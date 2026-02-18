@@ -58,7 +58,7 @@ ssh-keygen -t ed25519 -f k8s-workers-key
 
 ---
 
-### Configurando Workspace Hashcorp Cloud
+### 🏗 Configurando Workspace Hashicorp Cloud
 
 - Crie uma *Organization* e um *Workspace* e altere o arquivo `provider.tf`caso necessário:
 
