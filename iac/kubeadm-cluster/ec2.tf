@@ -436,14 +436,9 @@ EOF
   vpc_security_group_ids = [aws_security_group.workers_sg.id]
 }
 
-resource "tls_private_key" "k8s_workers" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
 resource "aws_key_pair" "k8s_workers" {
   key_name   = "k8s-workers-key"
-  public_key = tls_private_key.k8s_workers.public_key_openssh
+  public_key = file("k8s-workers-key.pub")
 }
 
 
