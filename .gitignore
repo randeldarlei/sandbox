@@ -1,2 +1,6 @@
 .env*
+.terraform*
+__pycache__*
+id_rsa*
 k8s-workers-key
+kubeconfig.yaml*

@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  platform:
+    build: .
+    container_name: terraform-platform
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./iac/kubeadm-cluster/k8s-workers-key:/app/id_rsa
+    env_file:
+      - .env
